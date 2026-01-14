@@ -2,33 +2,23 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>Grid A4 Next Level</title>
+<title>Grid A4 Rotate Tombol</title>
 <style>
-@page { size: A4 portrait; margin: 15mm; }
-body { font-family: Arial, sans-serif; margin:0; }
+@page { size:A4 portrait; margin:15mm; }
+body { font-family: Arial,sans-serif; margin:0; }
 #controls { padding:10px; background:#f2f2f2; }
-button { padding:6px 12px; margin-right:5px; }
+button { padding:5px 10px; margin:2px; }
 #grid-container { margin:0; }
-.grid-page {
-    width:180mm; height:267mm;
-    display:grid; gap:2mm; box-sizing:border-box;
-}
+.grid-page { width:180mm; height:267mm; display:grid; gap:2mm; box-sizing:border-box; }
 .grid-item { position:relative; overflow:hidden; border:1px dashed #333; }
 .grid-item img { position:absolute; top:50%; left:50%; transform-origin:center center; }
 
-/* slider container per gambar */
+/* slider & buttons container per gambar */
 .grid-item .controls {
-    position:absolute;
-    bottom:2mm;
-    left:50%;
-    transform:translateX(-50%);
-    display:flex; flex-direction:column; gap:2mm;
-    width:70%;
+    position:absolute; bottom:2mm; left:50%; transform:translateX(-50%);
+    display:flex; flex-direction:column; gap:2mm; width:70%;
 }
 .grid-item .controls input[type=range] { width:100%; }
-
-/* tombol rotate cepat */
-.grid-item .controls button { width:100%; }
 
 /* ================= PRINT ================= */
 @media print {
@@ -47,26 +37,21 @@ button { padding:6px 12px; margin-right:5px; }
 
 <div id="grid-container"></div>
 
-<!-- jsPDF & html2canvas -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
 <script>
-const gridContainer = document.getElementById('grid-container');
-const fileInput = document.getElementById('fileInput');
-let images = [];
+const gridContainer=document.getElementById('grid-container');
+const fileInput=document.getElementById('fileInput');
+let images=[];
 
-// Preset layout 2–10
-const layouts = {
-    2: { cols:1, rows:2 }, 3:{ cols:1, rows:3 }, 4:{ cols:2, rows:2 },
-    5:{ cols:2, rows:3 }, 6:{ cols:2, rows:3 }, 7:{ cols:2, rows:4 },
-    8:{ cols:2, rows:4 }, 9:{ cols:3, rows:3 }, 10:{ cols:2, rows:5 }
-};
+// preset layout 2–10
+const layouts={2:{cols:1,rows:2},3:{cols:1,rows:3},4:{cols:2,rows:2},5:{cols:2,rows:3},6:{cols:2,rows:3},
+               7:{cols:2,rows:4},8:{cols:2,rows:4},9:{cols:3,rows:3},10:{cols:2,rows:5}};
 
-fileInput.addEventListener('change', e=>{
+fileInput.addEventListener('change',e=>{
     images=[];
     [...e.target.files].forEach(f=>{
-        const reader = new FileReader();
+        const reader=new FileReader();
         reader.onload=ev=>images.push(ev.target.result);
         reader.readAsDataURL(f);
     });
@@ -74,64 +59,74 @@ fileInput.addEventListener('change', e=>{
 
 function generateGrid(){
     gridContainer.innerHTML='';
-    const count = images.length;
-    if(!layouts[count]){ alert('Jumlah gambar harus 2–10'); return; }
-    const {cols, rows} = layouts[count];
-    const totalBoxes = cols*rows;
-    const page = document.createElement('div');
-    page.className='grid-page';
-    page.style.gridTemplateColumns=`repeat(${cols},1fr)`;
-    page.style.gridTemplateRows=`repeat(${rows},1fr)`;
+    let remaining = [...images];
+    while(remaining.length>0){
+        const count=Math.min(remaining.length,10);
+        const imgs = remaining.splice(0,count);
+        const {cols,rows}=layouts[count];
+        const page = document.createElement('div'); page.className='grid-page';
+        page.style.gridTemplateColumns=`repeat(${cols},1fr)`;
+        page.style.gridTemplateRows=`repeat(${rows},1fr)`;
 
-    for(let i=0;i<totalBoxes;i++){
-        const item = document.createElement('div'); item.className='grid-item';
-        if(i<images.length){
-            const img = document.createElement('img'); img.src=images[i];
-            img.dataset.rotate=0;
-            img.onload=()=>{
-                const bw = item.clientWidth, bh=item.clientHeight;
-                const scale = Math.max(bw/img.naturalWidth, bh/img.naturalHeight);
-                img.dataset.base=scale;
-                img.style.transform=`translate(-50%,-50%) scale(${scale}) rotate(0deg)`;
-            };
+        for(let i=0;i<cols*rows;i++){
+            const item=document.createElement('div'); item.className='grid-item';
+            if(i<imgs.length){
+                const img=document.createElement('img'); img.src=imgs[i];
+                img.dataset.rotate=0;
+                img.onload=()=>{
+                    const bw=item.clientWidth, bh=item.clientHeight;
+                    const scale=Math.min(bw/img.naturalWidth,bh/img.naturalHeight);
+                    img.dataset.base=scale;
+                    img.style.transform=`translate(-50%,-50%) scale(${scale}) rotate(0deg)`;
+                };
 
-            // Zoom slider horizontal
-            const zoom = document.createElement('input');
-            zoom.type='range'; zoom.min=50; zoom.max=200; zoom.value=100;
-            zoom.oninput=()=>{ const base=img.dataset.base; const rotate=img.dataset.rotate; img.style.transform=`translate(-50%,-50%) scale(${base*zoom.value/100}) rotate(${rotate}deg)`; };
+                // zoom slider
+                const zoom=document.createElement('input');
+                zoom.type='range'; zoom.min=50; zoom.max=200; zoom.value=100;
+                zoom.oninput=()=>{ const base=img.dataset.base; const rotate=img.dataset.rotate; img.style.transform=`translate(-50%,-50%) scale(${base*zoom.value/100}) rotate(${rotate}deg)`; };
 
-            // Rotate 90° cepat
-            const rotateBtn = document.createElement('button');
-            rotateBtn.textContent='Rotate 90°';
-            rotateBtn.onclick=()=>{
-                img.dataset.rotate=(parseInt(img.dataset.rotate)+90)%360;
-                const base=img.dataset.base;
-                const zoomVal = zoom.value;
-                img.style.transform=`translate(-50%,-50%) scale(${base*zoomVal/100}) rotate(${img.dataset.rotate}deg)`;
-            };
+                // rotate 90° tombol
+                const rotateBtn=document.createElement('button');
+                rotateBtn.textContent='Rotate 90°';
+                rotateBtn.onclick=()=>{
+                    img.dataset.rotate=(parseInt(img.dataset.rotate)+90)%360;
+                    const base=img.dataset.base; const zoomVal=zoom.value;
+                    img.style.transform=`translate(-50%,-50%) scale(${base*zoomVal/100}) rotate(${img.dataset.rotate}deg)`;
+                };
 
-            const ctrlContainer = document.createElement('div'); ctrlContainer.className='controls';
-            ctrlContainer.appendChild(zoom);
-            ctrlContainer.appendChild(rotateBtn);
+                // reset rotate tombol
+                const resetBtn=document.createElement('button');
+                resetBtn.textContent='Reset Rotate';
+                resetBtn.onclick=()=>{
+                    img.dataset.rotate=0;
+                    const base=img.dataset.base; const zoomVal=zoom.value;
+                    img.style.transform=`translate(-50%,-50%) scale(${base*zoomVal/100}) rotate(0deg)`;
+                };
 
-            item.appendChild(img); item.appendChild(ctrlContainer);
+                const ctrlContainer=document.createElement('div'); ctrlContainer.className='controls';
+                ctrlContainer.appendChild(zoom);
+                ctrlContainer.appendChild(rotateBtn);
+                ctrlContainer.appendChild(resetBtn);
+
+                item.appendChild(img); item.appendChild(ctrlContainer);
+            }
+            page.appendChild(item);
         }
-        page.appendChild(item);
+        gridContainer.appendChild(page);
     }
-    gridContainer.appendChild(page);
 }
 
-// EXPORT PDF
+// export pdf multiple page otomatis
 async function exportPDF(){
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('p','mm','a4');
-    const pages = gridContainer.querySelectorAll('.grid-page');
+    const {jsPDF}=window.jspdf;
+    const pdf=new jsPDF('p','mm','a4');
+    const pages=gridContainer.querySelectorAll('.grid-page');
     for(let i=0;i<pages.length;i++){
-        const canvas = await html2canvas(pages[i],{scale:2});
-        const imgData = canvas.toDataURL('image/png');
-        const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        const canvas=await html2canvas(pages[i],{scale:2});
+        const imgData=canvas.toDataURL('image/png');
+        const imgProps=pdf.getImageProperties(imgData);
+        const pdfWidth=pdf.internal.pageSize.getWidth();
+        const pdfHeight=(imgProps.height*pdfWidth)/imgProps.width;
         if(i>0) pdf.addPage();
         pdf.addImage(imgData,'PNG',0,0,pdfWidth,pdfHeight);
     }
