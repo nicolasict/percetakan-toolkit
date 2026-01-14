@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Cetak KTP | Grid A4 10 KTP</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@page { size: A4; margin: 5mm; }
+@media print { #controls { display: none; } }
+
+.container { display: flex; gap: 20px; }
+#canvasContainer { flex: 1; }
+#sheetContainer { flex: 1; }
+
+#canvas { border: 1px solid #333; cursor: grab; width: 100%; height: auto; background: #fff; }
+
+#sheet { display: grid; grid-template-columns: repeat(2, 8.56cm); grid-template-rows: repeat(5, 5.4cm); gap: 3mm; justify-content: center; }
+.ktp { width: 8.56cm; height: 5.4cm; border: 1px dashed #9CA3AF; overflow: hidden; }
+.ktp img { width: 100%; height: 100%; object-fit: cover; }
+</style>
+</head>
+<body class="bg-gray-100 font-sans p-4">
+
+<div id="controls" class="p-4 bg-gray-200 rounded shadow-md flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
+    <input type="file" id="upload" accept="image/*" class="px-3 py-2 border border-gray-300 rounded shadow-sm">
+    
+    <label>Rotate:</label>
+    <input type="range" id="rotateSlider" min="-180" max="180" step="0.1" value="0">
+    <input type="number" id="rotateInput" value="0" step="0.1" min="-180" max="180">°
+    
+    <label>Zoom:</label>
+    <input type="range" id="zoomSlider" min="0.5" max="3" step="0.01" value="1">
+
+    <label for="jumlah" class="font-medium">Jumlah KTP per halaman:</label>
+    <input type="number" id="jumlah" min="1" max="10" value="10" class="w-16 px-2 py-1 border border-gray-300 rounded text-center">
+
+    <button id="generateKTP" class="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 transition">Generate KTP</button>
+    <button onclick="window.print()" class="px-4 py-2 bg-gray-600 text-white rounded shadow hover:bg-gray-700 transition">Print</button>
+    <button id="downloadPdf" class="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 transition">Download PDF</button>
+</div>
+
+<div class="container mt-4">
+    <div id="canvasContainer">
+        <canvas id="canvas" width="600" height="500"></canvas>
+    </div>
+    <div id="sheetContainer">
+        <div id="sheet"></div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const upload = document.getElementById("upload");
+const rotateSlider = document.getElementById("rotateSlider");
+const rotateInput = document.getElementById("rotateInput");
+const zoomSlider = document.getElementById("zoomSlider");
+const jumlahInput = document.getElementById("jumlah");
+const sheet = document.getElementById("sheet");
+const generateBtn = document.getElementById("generateKTP");
+const downloadPdfBtn = document.getElementById("downloadPdf");
+
+let img = new Image();
+let rotation = 0;
+let zoom = 1;
+let offsetX = 0;
+let offsetY = 0;
+let isPanning = false;
+let startPan = {x:0, y:0};
+
+// Crop rectangle default sesuai KTP tapi 2x lebih besar
+const CM_TO_PX = 28.35; // 1 cm ≈ 28.35 px
+let crop = { 
+    x: 50, 
+    y: 50, 
+    w: 8.56 * CM_TO_PX * 2,  // 2x lebar KTP
+    h: 5.4 * CM_TO_PX * 2    // 2x tinggi KTP
+};
+
+let draggingCrop = false;
+let resizingCrop = false;
+let dragOffset = { x:0, y:0 };
+
+// Load image
+upload.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const url = URL.createObjectURL(file);
+    img.onload = () => drawCanvas();
+    img.src = url;
+});
+
+// Draw canvas
+function drawCanvas(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.save();
+    ctx.translate(canvas.width/2 + offsetX, canvas.height/2 + offsetY);
+    ctx.rotate(rotation * Math.PI/180);
+    const scale = zoom * Math.min(canvas.width/img.width, canvas.height/img.height);
+    ctx.drawImage(img, -img.width/2*scale, -img.height/2*scale, img.width*scale, img.height*scale);
+    ctx.restore();
+
+    // Draw crop rectangle (2x KTP size)
+    ctx.strokeStyle = 'red';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(crop.x, crop.y, crop.w, crop.h);
+    ctx.fillStyle = 'red';
+    ctx.fillRect(crop.x+crop.w-10, crop.y+crop.h-10, 10, 10);
+}
+
+// Canvas interaction
+canvas.addEventListener('mousedown', e => {
+    const mx = e.offsetX;
+    const my = e.offsetY;
+    if(mx > crop.x + crop.w - 10 && mx < crop.x + crop.w && my > crop.y + crop.h - 10 && my < crop.y + crop.h){
+        resizingCrop = true;
+    } else if(mx > crop.x && mx < crop.x + crop.w && my > crop.y && my < crop.y + crop.h){
+        draggingCrop = true;
+        dragOffset.x = mx - crop.x;
+        dragOffset.y = my - crop.y;
+    } else {
+        isPanning = true;
+        startPan.x = e.clientX;
+        startPan.y = e.clientY;
+    }
+});
+
+canvas.addEventListener('mousemove', e => {
+    const mx = e.offsetX;
+    const my = e.offsetY;
+    if(resizingCrop){ crop.w = mx - crop.x; crop.h = my - crop.y; drawCanvas(); }
+    else if(draggingCrop){ crop.x = mx - dragOffset.x; crop.y = my - dragOffset.y; drawCanvas(); }
+    else if(isPanning){ offsetX += e.clientX - startPan.x; offsetY += e.clientY - startPan.y; startPan.x = e.clientX; startPan.y = e.clientY; drawCanvas(); }
+});
+canvas.addEventListener('mouseup', () => { draggingCrop=false; resizingCrop=false; isPanning=false; });
+canvas.addEventListener('mouseleave', () => { draggingCrop=false; resizingCrop=false; isPanning=false; });
+
+// Zoom & Rotate
+zoomSlider.addEventListener('input', e => { zoom = parseFloat(e.target.value); drawCanvas(); });
+rotateSlider.addEventListener('input', e => { rotation=parseFloat(e.target.value); rotateInput.value=rotation; drawCanvas(); });
+rotateInput.addEventListener('input', e => { rotation=parseFloat(e.target.value); rotateSlider.value=rotation; drawCanvas(); });
+
+// Generate KTPs
+generateBtn.addEventListener('click', () => {
+    if(!img.src) return;
+    sheet.innerHTML = "";
+    const jumlah = parseInt(jumlahInput.value)||10;
+
+    // Crop image from canvas
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = 8.56 * CM_TO_PX;  // Resize ke KTP asli
+    tempCanvas.height = 5.4 * CM_TO_PX;
+    const tctx = tempCanvas.getContext("2d");
+    tctx.drawImage(canvas, crop.x, crop.y, crop.w, crop.h, 0, 0, tempCanvas.width, tempCanvas.height);
+
+    // Convert to grayscale
+    const imgData = tctx.getImageData(0,0,tempCanvas.width,tempCanvas.height);
+    for(let i=0;i<imgData.data.length;i+=4){
+        const avg=(imgData.data[i]+imgData.data[i+1]+imgData.data[i+2])/3;
+        imgData.data[i]=imgData.data[i+1]=imgData.data[i+2]=avg;
+    }
+    tctx.putImageData(imgData,0,0);
+
+    for(let i=0;i<jumlah;i++){
+        const div = document.createElement("div");
+        div.className="ktp";
+        const imgEl = document.createElement("img");
+        imgEl.src = tempCanvas.toDataURL();
+        div.appendChild(imgEl);
+        sheet.appendChild(div);
+    }
+});
+
+// Download PDF
+downloadPdfBtn.addEventListener("click",()=>{
+    const opt={margin:0.2, filename:'KTP_A4_Grayscale.pdf', image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2}, jsPDF:{unit:'cm', format:'a4', orientation:'portrait'}};
+    html2pdf().set(opt).from(sheet).save();
+});
+</script>
+
+</body>
+</html>
